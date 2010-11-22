@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable, TypeSynonymInstances #-}
+{-# LANGUAGE DeriveDataTypeable, TemplateHaskell, TypeSynonymInstances #-}
 module Atomo.Types where
 
 import Control.Concurrent (ThreadId)
@@ -8,7 +8,6 @@ import "monads-fd" Control.Monad.State
 import Data.Dynamic
 import Data.Hashable (hash)
 import Data.List (nub)
-import Data.Maybe (fromMaybe)
 import Data.IORef
 import Text.Parsec (ParseError, SourcePos)
 import Text.PrettyPrint (Doc)
@@ -16,60 +15,111 @@ import qualified Data.IntMap as M
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import qualified Language.Haskell.Interpreter as H
+import qualified Language.Haskell.TH.Syntax as S
 
+
+-- | The Atomo VM. A Continuation monad wrapping a State monad.
 type VM = ContT Value (StateT Env IO)
 
+-- | All values usable in Atomo.
 data Value
+    -- | A block of expressions, bound to a context and with optional arguments.
     = Block !Value [Pattern] [Expr]
-    | Boolean { fromBoolean :: {-# UNPACK #-} !Bool }
+
+    -- | A boolean value.
+    | Boolean { fromBoolean :: !Bool }
+
+    -- | A character value.
     | Char { fromChar :: {-# UNPACK #-} !Char }
+
+    -- | A continuation reference.
     | Continuation { fromContinuation :: Continuation }
+
+    -- | A double value.
     | Double { fromDouble :: {-# UNPACK #-} !Double }
+
+    -- | An expression value.
     | Expression { fromExpression :: Expr }
+
+    -- | A dynamically-typed Haskell value.
     | Haskell Dynamic
+
+    -- | An Integer value.
     | Integer { fromInteger :: !Integer }
+
+    -- | A vector of Values.
     | List VVector
+
+    -- | A message value.
     | Message { fromMessage :: Message }
+
+    -- | A method value.
     | Method { fromMethod :: Method }
+
+    -- | A particle value.
     | Particle { fromParticle :: Particle }
+
+    -- | A process; a communications channel and the thread's ID.
     | Process Channel ThreadId
+
+    -- | A pattern value.
     | Pattern { fromPattern :: Pattern }
+
+    -- | A rational value.
     | Rational Rational
+
+    -- | An object reference.
     | Reference
         { rORef :: {-# UNPACK #-} !ORef
         }
+
+    -- | A string value; Data.Text.Text.
     | String { fromString :: !T.Text }
     deriving (Show, Typeable)
 
+-- | A pure object.
 data Object =
     Object
-        { oDelegates :: !Delegates
-        , oMethods :: !(MethodMap, MethodMap) -- singles, keywords
+        { -- | The object's delegates list.
+          oDelegates :: !Delegates
+
+          -- | A pair of (single, keyword) methods.
+        , oMethods :: !(MethodMap, MethodMap)
         }
     deriving (Show, Typeable)
 
+-- | Methods, slot, and macro methods.
 data Method
+    -- | Responds to a message by evaluating an expression in the given context.
     = Responder
         { mPattern :: !Pattern
         , mContext :: !Value
         , mExpr :: !Expr
         }
+
+    -- | Responds to a macro message by evaluating an expression.
     | Macro
         { mPattern :: !Pattern
         , mExpr :: !Expr
         }
+
+    -- | Responds to a message by returning a value.
     | Slot
         { mPattern :: !Pattern
         , mValue :: !Value
         }
     deriving (Eq, Show, Typeable)
 
+-- | Messages sent to objects.
 data Message
+    -- | A keyword-delimited message with multiple targets.
     = Keyword
         { mID :: !Int
         , mNames :: [String]
         , mTargets :: [Value]
         }
+
+    -- | A single message sent to one target.
     | Single
         { mID :: !Int
         , mName :: String
@@ -77,11 +127,16 @@ data Message
         }
     deriving (Eq, Show, Typeable)
 
+-- | Partial messages.
 data Particle
+    -- | A single message with no target.
     = PMSingle String
+
+    -- | A keyword message with many optional targets.
     | PMKeyword [String] [Maybe Value]
     deriving (Eq, Show, Typeable)
 
+-- | Shortcut error values.
 data AtomoError
     = Error Value
     | ParseError ParseError
@@ -96,7 +151,7 @@ data AtomoError
     | DynamicNeeded String
     deriving (Show, Typeable)
 
--- pattern-matches
+-- | Pattern-matching.
 data Pattern
     = PAny
     | PHeadTail Pattern Pattern
@@ -120,8 +175,6 @@ data Pattern
     | PThis
 
     -- expression types, used in macros
-    | PEDefine
-    | PESet
     | PEDispatch
     | PEOperator
     | PEPrimitive
@@ -136,7 +189,7 @@ data Pattern
     | PExpr Expr
     deriving (Show, Typeable)
 
--- expressions
+-- | Expressions; the nodes in a syntax tree.
 data Expr
     = Define
         { eLocation :: Maybe SourcePos
@@ -176,6 +229,10 @@ data Expr
         , ePattern :: Pattern
         , eExpr :: Expr
         }
+    | EForMacro
+        { eLocation :: Maybe SourcePos
+        , eExpr :: Expr
+        }
     | EParticle
         { eLocation :: Maybe SourcePos
         , eParticle :: EParticle
@@ -198,6 +255,7 @@ data Expr
         }
     deriving (Show, Typeable)
 
+-- | An unevaluated message dispatch.
 data EMessage
     = EKeyword
         { emID :: !Int
@@ -211,33 +269,51 @@ data EMessage
         }
     deriving (Eq, Show, Typeable)
 
+-- | An unevaluated particle.
 data EParticle
     = EPMSingle String
     | EPMKeyword [String] [Maybe Expr]
     deriving (Eq, Show, Typeable)
 
--- the evaluation environment
+-- | Atomo's VM state.
 data Env =
     Env
-        { top :: Value
+        { -- | The current toplevel object.
+          top :: Value
+
+          -- | A record of objects representing the primitive values.
         , primitives :: IDs
+
+          -- | This process's communications channel.
         , channel :: Channel
+
+          -- | Function to call which will shut down the entire VM when called
+          -- from any thread.
         , halt :: IO ()
+
+          -- | Paths to search for files.
         , loadPath :: [FilePath]
+
+          -- | Files aready loaded.
         , loaded :: [FilePath]
+
+          -- | The last N expressions evaluated up to the current error.
         , stack :: [Expr]
+
+          -- | The parser's state, passed around when a parser action needs to
+          -- be run.
         , parserState :: ParserState
         }
     deriving Typeable
 
--- operator associativity
+-- | Operator associativity.
 data Assoc = ALeft | ARight
     deriving (Eq, Show, Typeable)
 
--- a giant record of the objects for each primitive value
+-- | A giant record of the objects for each primitive value.
 data IDs =
     IDs
-        { idObject :: ORef -- root object
+        { idObject :: ORef
         , idBlock :: ORef
         , idBoolean :: ORef
         , idChar :: ORef
@@ -257,28 +333,48 @@ data IDs =
         }
     deriving (Show, Typeable)
 
-
+-- | State underlying the parser, and saved in the VM.
 data ParserState =
     ParserState
-        { psOperators :: Operators
+        { -- | Operator precedence and associativity.
+          psOperators :: Operators
+
+          -- | All defined macros; (single macros, keyword macros).
         , psMacros :: (MethodMap, MethodMap)
+
+          -- | Are we parsing in a quasiquote?
+        , psInQuote :: Bool
+
+          -- | The number of macros we've expanded.
+        , psClock :: Integer
+
+          -- | Environment that for-macro and macro methods are evaluated in.
+        , psEnvironment :: Value
         }
     deriving (Show, Typeable)
 
-startParserState :: ParserState
-startParserState = ParserState [] (M.empty, M.empty)
+-- | A map of operators to their associativity and precedence.
+type Operators = [(String, (Assoc, Integer))]
 
--- helper synonyms
-type Operators = [(String, (Assoc, Integer))] -- name -> assoc, precedence
+-- | The list of values an object delegates to.
 type Delegates = [Value]
+
+-- | A channel for sending values through to processes.
 type Channel = Chan Value
+
+-- | A selector-indexed and precision-sorted map of methods.
 type MethodMap = M.IntMap [Method]
+
+-- | A reference to an object.
 type ORef = IORef Object
+
+-- | A vector containing values.
 type VVector = V.Vector Value
+
+-- | A reference to a continuation function.
 type Continuation = IORef (Value -> VM Value)
 
 
--- a basic Eq instance
 instance Eq Value where
     (==) (Block at aps aes) (Block bt bps bes) =
         at == bt && aps == bps && aes == bes
@@ -354,6 +450,86 @@ instance Typeable (VM a) where
     typeOf _ = mkTyConApp (mkTyCon "VM") [typeOf ()]
 
 
+instance S.Lift Expr where
+    lift (Define _ p e) = [| Define Nothing p e |]
+    lift (Set _ p e) = [| Set Nothing p e |]
+    lift (Dispatch _ m) = [| Dispatch Nothing m |]
+    lift (Operator _ ns a p) = [| Operator Nothing ns a p |]
+    lift (Primitive _ v) = [| Primitive Nothing v |]
+    lift (EBlock _ as es) = [| EBlock Nothing as es |]
+    lift (EVM {}) = error "cannot lift EVM"
+    lift (EList _ es) = [| EList Nothing es |]
+    lift (ETop _) = [| ETop Nothing |]
+    lift (EParticle _ p) = [| EParticle Nothing p |]
+    lift (EMacro _ p e) = [| EMacro Nothing p e |]
+    lift (EForMacro _ e) = [| EForMacro Nothing e |]
+    lift (EQuote _ e) = [| EQuote Nothing e |]
+    lift (EUnquote _ e) = [| EUnquote Nothing e |]
+
+instance S.Lift Assoc where
+    lift ALeft = [| ALeft |]
+    lift ARight = [| ARight |]
+
+instance S.Lift Message where
+    lift (Keyword i ns vs) = [| Keyword i ns vs |]
+    lift (Single i n v) = [| Single i n v |]
+
+instance S.Lift Particle where
+    lift (PMSingle n) = [| PMSingle n |]
+    lift (PMKeyword ns vs) = [| PMKeyword ns vs |]
+
+instance S.Lift EMessage where
+    lift (EKeyword i ns es) = [| EKeyword i ns es |]
+    lift (ESingle i n e) = [| ESingle i n e |]
+
+instance S.Lift EParticle where
+    lift (EPMSingle n) = [| EPMSingle n |]
+    lift (EPMKeyword ns es) = [| EPMKeyword ns es |]
+
+instance S.Lift Value where
+    lift (Block s as es) = [| Block s as es |]
+    lift (Boolean b) = [| Boolean b |]
+    lift (Char c) = [| Char c |]
+    lift (Double d) = [| Double $(return $ S.LitE (S.RationalL (toRational d))) |]
+    lift (Expression e) = [| Expression e |]
+    lift (Integer i) = [| Integer i |]
+    lift (Message m) = [| Message m |]
+    lift (Particle p) = [| Particle p |]
+    lift (Pattern p) = [| Pattern p |]
+    lift (String s) = [| String (T.pack $(return $ S.LitE (S.StringL (T.unpack s)))) |]
+    lift v = error $ "no lift for: " ++ show v
+
+instance S.Lift Pattern where
+    lift PAny = [| PAny |]
+    lift (PHeadTail h t) = [| PHeadTail h t |]
+    lift (PKeyword i ns ts) = [| PKeyword i ns ts |]
+    lift (PList ps) = [| PList ps |]
+    lift (PMatch v) = [| PMatch v |]
+    lift (PNamed n p) = [| PNamed n p |]
+    lift (PObject e) = [| PObject e |]
+    lift (PPMKeyword ns ts) = [| PPMKeyword ns ts |]
+    lift (PSingle i n t) = [| PSingle i n t |]
+    lift PThis = [| PThis |]
+    lift PEDispatch = [| PEDispatch |]
+    lift PEOperator = [| PEOperator |]
+    lift PEPrimitive = [| PEPrimitive |]
+    lift PEBlock = [| PEBlock |]
+    lift PEList = [| PEList |]
+    lift PEMacro = [| PEMacro |]
+    lift PEParticle = [| PEParticle |]
+    lift PETop = [| PETop |]
+    lift PEQuote = [| PEQuote |]
+    lift PEUnquote = [| PEUnquote |]
+    lift (PExpr e) = [| PExpr e |]
+    lift (PInstance p) = [| PInstance p |]
+    lift (PStrict p) = [| PStrict p |]
+
+
+-- | Initial "empty" parser state.
+startParserState :: ParserState
+startParserState = ParserState [] (M.empty, M.empty) False 0 (error "no parser environment")
+
+-- | Initial "empty" environment state.
 startEnv :: Env
 startEnv = Env
     { top = error "top object not set"
@@ -385,11 +561,11 @@ startEnv = Env
     , parserState = startParserState
     }
 
--- | evaluate x with e as the environment
+-- | Evaluate x with e as the environment.
 runWith :: VM Value -> Env -> IO Value
 runWith x = evalStateT (runContT x return)
 
--- | evaluate x with e as the environment
+-- | Evaluate x with e as the environment.
 runVM :: VM Value -> Env -> IO (Value, Env)
 runVM x = runStateT (runContT x return)
 
@@ -398,153 +574,162 @@ runVM x = runStateT (runContT x return)
 -- Helpers ------------------------------------------------------------------
 -----------------------------------------------------------------------------
 
+-- | Create a single particle with a given name.
 particle :: String -> Value
 {-# INLINE particle #-}
 particle = Particle . PMSingle
 
+-- | Create a keyword particle with a given name and optional values.
 keyParticle :: [String] -> [Maybe Value] -> Value
 {-# INLINE keyParticle #-}
 keyParticle ns vs = Particle $ PMKeyword ns vs
 
+-- | Create a keyword particle with no first role and the given values.
 keyParticleN :: [String] -> [Value] -> Value
 {-# INLINE keyParticleN #-}
 keyParticleN ns vs = keyParticle ns (Nothing:map Just vs)
 
+-- | Convert a String into a Value.
 string :: String -> Value
 {-# INLINE string #-}
 string = String . T.pack
 
+-- | Convert a Typeable value into a Haskell Value.
 haskell :: Typeable a => a -> Value
 {-# INLINE haskell #-}
 haskell = Haskell . toDyn
 
+-- | Convert a list of values into a List Value.
 list :: [Value] -> Value
+{-# INLINE list #-}
 list = List . V.fromList
 
+-- | Convert a Text string into a String.
 fromText :: T.Text -> String
+{-# INLINE fromText #-}
 fromText = T.unpack
 
+-- | Convert a List Value into a list of Values.
 fromList :: Value -> [Value]
 fromList (List vr) = V.toList vr
 fromList v = error $ "no fromList for: " ++ show v
 
+-- | Create a single message with a given name and target.
 single :: String -> Value -> Message
 {-# INLINE single #-}
 single n = Single (hash n) n
 
+-- | Create a keyword message with a given name and targets.
 keyword :: [String] -> [Value] -> Message
 {-# INLINE keyword #-}
 keyword ns = Keyword (hash ns) ns
 
+-- | Create a single message pattern with a given name and target pattern.
 psingle :: String -> Pattern -> Pattern
 {-# INLINE psingle #-}
 psingle n = PSingle (hash n) n
 
+-- | Create a keyword message pattern with a given name and target patterns.
 pkeyword :: [String] -> [Pattern] -> Pattern
 {-# INLINE pkeyword #-}
 pkeyword ns = PKeyword (hash ns) ns
 
+-- | Create a single message expression with a given name and target expression.
 esingle :: String -> Expr -> EMessage
 {-# INLINE esingle #-}
 esingle n = ESingle (hash n) n
 
+-- | Create a keyword message expression with a given name and target expressions.
 ekeyword :: [String] -> [Expr] -> EMessage
 {-# INLINE ekeyword #-}
 ekeyword ns = EKeyword (hash ns) ns
 
--- | Fill in the empty values of a particle. The number of values missing
--- is expected to be equal to the number of values provided.
-completeKP :: [Maybe Value] -> [Value] -> [Value]
-completeKP [] _ = []
-completeKP (Nothing:mvs') (v:vs') = v : completeKP mvs' vs'
-completeKP (Just v:mvs') vs' = v : completeKP mvs' vs'
-completeKP mvs' vs' = error $ "impossible: completeKP on " ++ show (mvs', vs')
-
--- | Is a value a Block?
+-- | Is a value a `Block'?
 isBlock :: Value -> Bool
 isBlock (Block _ _ _) = True
 isBlock _ = False
 
--- | Is a value a Boolean?
+-- | Is a value a `Boolean'?
 isBoolean :: Value -> Bool
 isBoolean (Boolean _) = True
 isBoolean _ = False
 
--- | Is a value a Char?
+-- | Is a value a `Char'?
 isChar :: Value -> Bool
 isChar (Char _) = True
 isChar _ = False
 
--- | Is a value a Continuation?
+-- | Is a value a `Continuation'?
 isContinuation :: Value -> Bool
 isContinuation (Continuation _) = True
 isContinuation _ = False
 
--- | Is a value a Double?
+-- | Is a value a `Double'?
 isDouble :: Value -> Bool
 isDouble (Double _) = True
 isDouble _ = False
 
--- | Is a value an Expression?
+-- | Is a value an `Expression'?
 isExpression :: Value -> Bool
 isExpression (Expression _) = True
 isExpression _ = False
 
--- | Is a value a Haskell value?
+-- | Is a value a `Haskell'?
 isHaskell :: Value -> Bool
 isHaskell (Haskell _) = True
 isHaskell _ = False
 
--- | Is a value an Integer?
+-- | Is a value an `Integer'?
 isInteger :: Value -> Bool
 isInteger (Integer _) = True
 isInteger _ = False
 
--- | Is a value a List?
+-- | Is a value a `List'?
 isList :: Value -> Bool
 isList (List _) = True
 isList _ = False
 
--- | Is a value a Message?
+-- | Is a value a `Message'?
 isMessage :: Value -> Bool
 isMessage (Message _) = True
 isMessage _ = False
 
--- | Is a value a Method?
+-- | Is a value a `Method'?
 isMethod :: Value -> Bool
 isMethod (Method _) = True
 isMethod _ = False
 
--- | Is a value a Particle?
+-- | Is a value a `Particle'?
 isParticle :: Value -> Bool
 isParticle (Particle _) = True
 isParticle _ = False
 
--- | Is a value a Pattern?
+-- | Is a value a `Pattern'?
 isPattern :: Value -> Bool
 isPattern (Pattern _) = True
 isPattern _ = False
 
--- | Is a value a Process?
+-- | Is a value a `Process'?
 isProcess :: Value -> Bool
 isProcess (Process _ _) = True
 isProcess _ = False
 
--- | Is a value a Rational?
+-- | Is a value a `Rational'?
 isRational :: Value -> Bool
 isRational (Rational _) = True
 isRational _ = False
 
--- | Is a value a Reference?
+-- | Is a value a `Reference'?
 isReference :: Value -> Bool
 isReference (Reference _) = True
 isReference _ = False
 
--- | Is a value a String?
+-- | Is a value a `String'?
 isString :: Value -> Bool
 isString (String _) = True
 isString _ = False
 
+-- | Convert an AtomoError into the Value we want to error with.
 asValue :: AtomoError -> Value
 asValue (Error v) = v
 asValue (ParseError pe) =
@@ -579,8 +764,23 @@ asValue (ValueNotFound d v) =
 asValue (DynamicNeeded t) =
     keyParticleN ["dynamic-needed"] [string t]
 
-fromHaskell' :: Typeable a => String -> Value -> a
-fromHaskell' t (Haskell d) =
-    fromMaybe (error ("needed Haskell value of type " ++ t))
-        (fromDynamic d)
-fromHaskell' t _ = error ("needed haskell value of type " ++ t)
+-- | Given a record of primitive IDs, get the object reference backing a value.
+orefFrom :: IDs -> Value -> ORef
+{-# INLINE orefFrom #-}
+orefFrom _ (Reference r) = r
+orefFrom ids (Block _ _ _) = idBlock ids
+orefFrom ids (Boolean _) = idBoolean ids
+orefFrom ids (Char _) = idChar ids
+orefFrom ids (Continuation _) = idContinuation ids
+orefFrom ids (Double _) = idDouble ids
+orefFrom ids (Expression _) = idExpression ids
+orefFrom ids (Haskell _) = idHaskell ids
+orefFrom ids (Integer _) = idInteger ids
+orefFrom ids (List _) = idList ids
+orefFrom ids (Message _) = idMessage ids
+orefFrom ids (Method _) = idMethod ids
+orefFrom ids (Particle _) = idParticle ids
+orefFrom ids (Process _ _) = idProcess ids
+orefFrom ids (Pattern _) = idPattern ids
+orefFrom ids (Rational _) = idRational ids
+orefFrom ids (String _) = idString ids

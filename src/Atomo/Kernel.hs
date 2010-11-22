@@ -8,6 +8,7 @@ import Data.Maybe (isJust)
 import Atomo
 import Atomo.Load
 import Atomo.Method
+import Atomo.Pattern (bindings')
 import Atomo.Pretty
 
 import qualified Atomo.Kernel.Numeric as Numeric
@@ -91,8 +92,8 @@ load = do
         let (ss, ks) = oMethods o
 
         ([$p|ms|] =::) =<< eval [$e|Object clone|]
-        [$p|ms singles|] =:: list (map (list . map Method) (elemsMap ss))
-        [$p|ms keywords|] =:: list (map (list . map Method) (elemsMap ks))
+        [$p|(ms) singles|] =:: list (map (list . map Method) (elemsMap ss))
+        [$p|(ms) keywords|] =:: list (map (list . map Method) (elemsMap ks))
         here "ms"
 
     [$p|(x: Object) dump|] =: do
