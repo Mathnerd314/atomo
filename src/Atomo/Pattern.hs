@@ -234,7 +234,7 @@ toPattern (Primitive { eValue = v }) =
 toPattern (ETop {}) =
     return (PObject (ETop Nothing))
 toPattern b@(EBlock {}) =
-    return (PObject (Dispatch Nothing (single "call" b)))
+    return (PObject (Dispatch Nothing (keyword ["call-in"] [b, ETop Nothing])))
 toPattern _ = Nothing
 
 -- | Convert an expression into a definition's message pattern.
