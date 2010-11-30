@@ -33,7 +33,7 @@ class Pretty a where
 
 
 instance Pretty Value where
-    prettyFrom _ (Block _ ps es)
+    prettyFrom _ (Block (_, ps, es))
         | null ps = braces exprs
         | otherwise = braces $
             sep (map (prettyFrom CArgs) ps) <+> char '|' <+> exprs
@@ -56,7 +56,7 @@ instance Pretty Value where
     prettyFrom _ (Method (Macro p _)) = internal "macro" $ parens (pretty p)
     prettyFrom _ (Particle p) = char '@' <> pretty p
     prettyFrom _ (Pattern p) = internal "pattern" $ pretty p
-    prettyFrom _ (Process _ tid) =
+    prettyFrom _ (Process (_, tid)) =
         internal "process" $ text (words (show tid) !! 1)
     prettyFrom CNone (Reference r) = pretty (unsafePerformIO (readIORef r))
     prettyFrom _ (Rational r) =

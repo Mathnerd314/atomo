@@ -11,6 +11,7 @@ import Atomo.Environment
 import Atomo.Method
 import Atomo.Pattern
 import Atomo.Types
+import Atomo.Value
 
 
 infixr 0 =:, =::
@@ -50,115 +51,30 @@ findValue' t (Reference r) = do
             Just v -> return (Just v)
 findValue' _ _ = return Nothing
 
--- | `findValue' for `Block'
-findBlock :: Value -> VM Value
-findBlock v
-    | isBlock v = return v
-    | otherwise = findValue "Block" isBlock v
+-- | `findValue' for specific types
+findV :: (Valuable a) => a -> Value -> VM Value
+findV a v
+    | isValue a v = return v
+    | otherwise = findValue (valueName a) (isValue a) v
 
--- | `findValue' for `Boolean'
-findBoolean :: Value -> VM Value
-findBoolean v
-    | isBoolean v = return v
-    | otherwise = findValue "Boolean" isBoolean v
-
--- | `findValue' for `Char'
-findChar :: Value -> VM Value
-findChar v
-    | isChar v = return v
-    | otherwise = findValue "Char" isChar v
-
--- | `findValue' for `Continuation'
-findContinuation :: Value -> VM Value
-findContinuation v
-    | isContinuation v = return v
-    | otherwise = findValue "Continuation" isContinuation v
-
--- | `findValue' for `Double'
-findDouble :: Value -> VM Value
-findDouble v
-    | isDouble v = return v
-    | otherwise = findValue "Double" isDouble v
-
--- | `findValue' for `Expression'
-findExpression :: Value -> VM Value
-findExpression v
-    | isExpression v = return v
-    | otherwise = findValue "Expression" isExpression v
-
--- | `findValue' for `Haskell'
-findHaskell :: Value -> VM Value
-findHaskell v
-    | isHaskell v = return v
-    | otherwise = findValue "Haskell" isHaskell v
-
--- | `findValue' for `Integer'
-findInteger :: Value -> VM Value
-findInteger v
-    | isInteger v = return v
-    | otherwise = findValue "Integer" isInteger v
-
--- | `findValue' for `List'
-findList :: Value -> VM Value
-findList v
-    | isList v = return v
-    | otherwise = findValue "List" isList v
-
--- | `findValue' for `Message'
-findMessage :: Value -> VM Value
-findMessage v
-    | isMessage v = return v
-    | otherwise = findValue "Message" isMessage v
-
--- | `findValue' for `Method''
-findMethod' :: Value -> VM Value
-findMethod' v
-    | isMethod v = return v
-    | otherwise = findValue "Method" isMethod v
-
--- | `findValue' for `Particle'
-findParticle :: Value -> VM Value
-findParticle v
-    | isParticle v = return v
-    | otherwise = findValue "Particle" isParticle v
-
--- | `findValue' for `Process'
-findProcess :: Value -> VM Value
-findProcess v
-    | isProcess v = return v
-    | otherwise = findValue "Process" isProcess v
-
--- | `findValue' for `Pattern'
-findPattern :: Value -> VM Value
-findPattern v
-    | isPattern v = return v
-    | otherwise = findValue "Pattern" isPattern v
-
--- | `findValue' for `Rational'
-findRational :: Value -> VM Value
-findRational v
-    | isRational v = return v
-    | otherwise = findValue "Rational" isRational v
-
--- | `findValue' for `Reference'
-findReference :: Value -> VM Value
-findReference v
-    | isReference v = return v
-    | otherwise = findValue "Reference" isReference v
-
--- | `findValue' for `String'
-findString :: Value -> VM Value
-findString v
-    | isString v = return v
-    | otherwise = findValue "String" isString v
+getV :: forall a. (Valuable a) => Value -> VM a
+{-# SPECIALISE getV :: Value -> VM Bool #-}
+{-# SPECIALISE getV :: Value -> VM Char #-}
+{-# SPECIALISE getV :: Value -> VM Double #-}
+{-# SPECIALISE getV :: Value -> VM Integer #-}
+{-# SPECIALISE getV :: Value -> VM Rational #-}
+{-# SPECIALISE getV :: Value -> VM T.Text #-}
+{-# SPECIALISE getV :: Value -> VM Value #-}
+{-# SPECIALISE getV :: Value -> VM VVector #-}
+getV x = findV (undefined :: a) x >>= fromValue
 
 -- | Find a String given an expression to evaluate.
 getString :: Expr -> VM String
-getString e = eval e >>= liftM (fromText . fromString) . findString
+getString e = eval e >>= liftM (fromText . fromString) . (findV (undefined :: T.Text))
 
 -- | Find a Data.Text.Text given an expression to evaluate.
 getText :: Expr -> VM T.Text
-getText e = eval e >>= findString >>= \(String t) -> return t
+getText e = eval e >>= (findV (undefined :: T.Text)) >>= fromValue
 
 -- | Find a list of values, given an expression to evaluate.
 getList :: Expr -> VM [Value]
@@ -167,12 +83,44 @@ getList = liftM V.toList . getVector
 -- | Find a VVector, given an expression to evaluate.
 getVector :: Expr -> VM VVector
 getVector e = eval e
-    >>= findList
-    >>= \(List v) -> return v
+    >>= (findV (undefined :: VVector))
+    >>= fromValue
 
 -- | Dispatch a single message to the current toplevel.
 here :: String -> VM Value
 here n = gets top >>= dispatch . single n
+
+lift1 :: (Valuable a, Valuable b) => (a -> b) -> VM Value
+{-# SPECIALIZE lift1 :: (Double -> Double) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Double -> Integer) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Integer -> Double) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Integer -> Rational) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Rational -> Double) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Rational -> Integer) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Rational -> Rational) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Char -> Integer) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Char -> Bool) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Char -> Value) -> VM Value #-}
+{-# SPECIALIZE lift1 :: (Integer -> Char) -> VM Value #-}
+lift1 f = do
+    a <- here "a" >>= getV
+    return (toValue (f a))
+
+lift2 :: (Valuable a, Valuable b, Valuable c) => (a -> b -> c) -> VM Value
+{-# SPECIALIZE lift2 :: (Double -> Double -> Double) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Double -> Double -> Rational) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Double -> Integer -> Double) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Double -> Rational -> Rational) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Integer -> Double -> Double) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Integer -> Integer -> Integer) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Integer -> Rational -> Rational) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Rational -> Double -> Rational) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Rational -> Integer -> Rational) -> VM Value #-}
+{-# SPECIALIZE lift2 :: (Rational -> Rational -> Rational) -> VM Value #-}
+lift2 f = do
+    a <- here "a" >>= getV
+    b <- here "b" >>= getV
+    return (toValue (f a b))
 
 -- | if-then-else based on a VM action yielding a Boolean Value.
 ifVM :: VM Value -> VM a -> VM a -> VM a
@@ -197,8 +145,8 @@ referenceTo = liftM Reference . orefFor
 
 -- | Call a block with the given arguments. Creates a scope, checks that its
 -- argument patterns match, and executes it with the bindings.
-callBlock :: Value -> [Value] -> VM Value
-callBlock (Block s ps es) vs = do
+callBlock :: Block -> [Value] -> VM Value
+callBlock (s, ps, es) vs = do
     is <- gets primitives
     checkArgs is ps vs
     doBlock (toMethods . concat $ zipWith bindings' ps vs) s es
@@ -208,7 +156,6 @@ callBlock (Block s ps es) vs = do
     checkArgs is (p:ps') (v:vs')
         | match is Nothing p v = checkArgs is ps' vs'
         | otherwise = throwError (Mismatch p v)
-callBlock x _ = raise ["not-a-block"] [x]
 
 -- | Evaluate multiple expressions given a context and bindings for the
 -- toplevel object.

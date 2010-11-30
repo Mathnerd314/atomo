@@ -8,45 +8,39 @@ import Atomo
 
 load :: VM ()
 load = do
-    [$p|(c: Char) control?|] =: liftM Boolean (onChar isControl)
-    [$p|(c: Char) space?|] =: liftM Boolean (onChar isSpace)
-    [$p|(c: Char) lower?|] =: liftM Boolean (onChar isLower)
-    [$p|(c: Char) upper?|] =: liftM Boolean (onChar isUpper)
-    [$p|(c: Char) alpha?|] =: liftM Boolean (onChar isAlpha)
-    [$p|(c: Char) alphanum?|] =: liftM Boolean (onChar isAlphaNum)
-    [$p|(c: Char) print?|] =: liftM Boolean (onChar isPrint)
-    [$p|(c: Char) digit?|] =: liftM Boolean (onChar isDigit)
-    [$p|(c: Char) oct-digit?|] =: liftM Boolean (onChar isOctDigit)
-    [$p|(c: Char) hex-digit?|] =: liftM Boolean (onChar isHexDigit)
-    [$p|(c: Char) letter?|] =: liftM Boolean (onChar isLetter)
-    [$p|(c: Char) mark?|] =: liftM Boolean (onChar isMark)
-    [$p|(c: Char) number?|] =: liftM Boolean (onChar isNumber)
-    [$p|(c: Char) punctuation?|] =: liftM Boolean (onChar isPunctuation)
-    [$p|(c: Char) symbol?|] =: liftM Boolean (onChar isSymbol)
-    [$p|(c: Char) separator?|] =: liftM Boolean (onChar isSeparator)
-    [$p|(c: Char) ascii?|] =: liftM Boolean (onChar isAscii)
-    [$p|(c: Char) latin1?|] =: liftM Boolean (onChar isLatin1)
-    [$p|(c: Char) ascii-upper?|] =: liftM Boolean (onChar isAsciiLower)
-    [$p|(c: Char) ascii-lower?|] =: liftM Boolean (onChar isAsciiUpper)
+    [$p|(a: Char) control?|] =: lift1 isControl
+    [$p|(a: Char) space?|] =: lift1 isSpace
+    [$p|(a: Char) lower?|] =: lift1 isLower
+    [$p|(a: Char) upper?|] =: lift1 isUpper
+    [$p|(a: Char) alpha?|] =: lift1 isAlpha
+    [$p|(a: Char) alphanum?|] =: lift1 isAlphaNum
+    [$p|(a: Char) print?|] =: lift1 isPrint
+    [$p|(a: Char) digit?|] =: lift1 isDigit
+    [$p|(a: Char) oct-digit?|] =: lift1 isOctDigit
+    [$p|(a: Char) hex-digit?|] =: lift1 isHexDigit
+    [$p|(a: Char) letter?|] =: lift1 isLetter
+    [$p|(a: Char) mark?|] =: lift1 isMark
+    [$p|(a: Char) number?|] =: lift1 isNumber
+    [$p|(a: Char) punctuation?|] =: lift1 isPunctuation
+    [$p|(a: Char) symbol?|] =: lift1 isSymbol
+    [$p|(a: Char) separator?|] =: lift1 isSeparator
+    [$p|(a: Char) ascii?|] =: lift1 isAscii
+    [$p|(a: Char) latin1?|] =: lift1 isLatin1
+    [$p|(a: Char) ascii-upper?|] =: lift1 isAsciiLower
+    [$p|(a: Char) ascii-lower?|] =: lift1 isAsciiUpper
 
-    [$p|(c: Char) uppercase|] =: liftM Char (onChar toUpper)
-    [$p|(c: Char) lowercase|] =: liftM Char (onChar toLower)
-    [$p|(c: Char) titlecase|] =: liftM Char (onChar toTitle)
+    [$p|(a: Char) uppercase|] =: lift1 toUpper
+    [$p|(a: Char) lowercase|] =: lift1 toLower
+    [$p|(a: Char) titlecase|] =: lift1 toTitle
 
-    [$p|(c: Char) from-digit|] =: liftM (Integer . fromIntegral) (onChar digitToInt)
-    [$p|(i: Integer) to-digit|] =: liftM Char (onInteger (intToDigit . fromIntegral))
+    [$p|(a: Char) from-digit|] =: lift1 (toInteger . digitToInt)
+    [$p|(a: Integer) to-digit|] =: lift1 (intToDigit . fromInteger)
 
-    [$p|(c: Char) ord|] =: liftM (Integer . fromIntegral) (onChar ord)
-    [$p|(i: Integer) chr|] =: liftM Char (onInteger (chr . fromIntegral))
+    [$p|(a: Char) ord|] =: lift1 (toInteger . ord)
+    [$p|(a: Integer) chr|] =: lift1 (chr . fromInteger)
 
-    [$p|(c: Char) category|] =: liftM c (onChar generalCategory)
+    [$p|(a: Char) category|] =: lift1 (c.generalCategory)
   where
-    onChar :: (Char -> a) -> VM a
-    onChar f = here "c" >>= liftM (f . fromChar) . findChar
-
-    onInteger :: (Integer -> a) -> VM a
-    onInteger f = here "i" >>= liftM (f . Atomo.fromInteger) . findInteger
-
     c UppercaseLetter = keyParticleN ["letter"] [particle "lowercase"]
     c LowercaseLetter = keyParticleN ["letter"] [particle "uppercase"]
     c TitlecaseLetter = keyParticleN ["letter"] [particle "titlecase"]

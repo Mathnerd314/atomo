@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 module Atomo.Kernel.Particle (load) where
 
@@ -11,28 +11,28 @@ load = do
         [$e|(p complete: targets) dispatch|]
 
     [$p|(p: Particle) name|] =: do
-        Particle (PMSingle n) <- here "p" >>= findParticle
+        ((PMSingle n :: Particle Value)) <- here "p" >>= getV
         return (string n)
 
     [$p|(p: Particle) names|] =: do
-        Particle (PMKeyword ns _) <- here "p" >>= findParticle
+        ((PMKeyword ns _ :: Particle Value)) <- here "p" >>= getV
         return $ list (map string ns)
 
     [$p|(p: Particle) values|] =: do
-        (Particle (PMKeyword _ mvs)) <- here "p" >>= findParticle
+        ((PMKeyword _ mvs) :: Particle Value) <- here "p" >>= getV
         return . list $
             map
                 (maybe (particle "none") (keyParticleN ["ok"] . (:[])))
                 mvs
 
     [$p|(p: Particle) type|] =: do
-        Particle p <- here "p" >>= findParticle
+        (p :: Particle Value) <- here "p" >>= getV
         case p of
             PMKeyword {} -> return (particle "keyword")
             PMSingle {} -> return (particle "single")
 
     [$p|(p: Particle) complete: (targets: List)|] =: do
-        Particle p <- here "p" >>= findParticle
+        (p :: Particle Value) <- here "p" >>= getV
         vs <- getList [$e|targets|]
 
         case p of
@@ -48,7 +48,7 @@ load = do
                     else return . Message . single n $ head vs
 
     [$p|c define: (p: Particle) on: v with: (targets: List) as: e|] =: do
-        Particle p <- here "p" >>= findParticle
+        (p :: Particle Value) <- here "p" >>= getV
         v <- here "v"
         ts <- getList [$e|targets|]
         e <- here "e"
@@ -83,7 +83,7 @@ load = do
         return (particle "ok")
 
     [$p|c define: (p: Particle) on: (targets: List) as: v|] =: do
-        Particle p <- here "p" >>= findParticle
+        (p :: Particle Value) <- here "p" >>= getV
         vs <- getList [$e|targets|]
         v <- here "v"
         c <- here "c"

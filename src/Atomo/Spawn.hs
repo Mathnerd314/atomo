@@ -15,4 +15,4 @@ spawn x = do
         runWith (x >> return (particle "ok")) (e { channel = chan })
         return ()
 
-    return (Process chan tid)
+    return (Process (chan, tid))

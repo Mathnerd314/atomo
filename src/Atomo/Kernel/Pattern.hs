@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 module Atomo.Kernel.Pattern (load) where
 
@@ -12,22 +12,22 @@ load = do
     ([$p|Pattern Define|] =::) =<< eval [$e|Pattern clone|]
 
     [$p|(e: Expression) as: Pattern|] =: do
-        Expression e <- here "e" >>= findExpression
+        (e :: Expr) <- here "e" >>= getV
         p <- toPattern' e
         return (Pattern p)
 
     [$p|(e: Expression) as: Pattern Role|] =: do
-        Expression e <- here "e" >>= findExpression
+        (e :: Expr) <- here "e" >>= getV
         p <- toRolePattern' e
         return (Pattern p)
 
     [$p|(e: Expression) as: Pattern Define|] =: do
-        Expression e <- here "e" >>= findExpression
+        (e :: Expr) <- here "e" >>= getV
         p <- toDefinePattern' e
         return (Pattern (PMessage p))
 
     [$p|(p: Pattern) name|] =: do
-        Pattern p <- here "p" >>= findPattern
+        (p :: Pattern) <- here "p" >>= getV
 
         case p of
             PNamed n _ -> return (string n)
@@ -35,28 +35,28 @@ load = do
             _ -> raise ["no-name-for"] [Pattern p]
 
     [$p|(p: Pattern) names|] =: do
-        Pattern p <- here "p" >>= findPattern
+        (p :: Pattern) <- here "p" >>= getV
 
         case p of
             PMessage (Keyword { mNames = ns }) -> return $ list (map string ns)
             _ -> raise ["no-names-for"] [Pattern p]
 
     [$p|(p: Pattern) target|] =: do
-        Pattern p <- here "p" >>= findPattern
+        (p :: Pattern) <- here "p" >>= getV
 
         case p of
             PMessage (Single { mTarget = t }) -> return (Pattern t)
             _ -> raise ["no-target-for"] [Pattern p]
 
     [$p|(p: Pattern) targets|] =: do
-        Pattern p <- here "p" >>= findPattern
+        (p :: Pattern) <- here "p" >>= getV
 
         case p of
             PMessage (Keyword { mTargets = ts }) -> return $ list (map Pattern ts)
             _ -> raise ["no-targets-for"] [Pattern p]
 
     [$p|(p: Pattern) matches?: v|] =: do
-        Pattern p <- here "p" >>= findPattern
+        (p :: Pattern) <- here "p" >>= getV
         v <- here "v"
         ids <- gets primitives
 
@@ -68,7 +68,7 @@ load = do
             else return (particle "no")
 
     [$p|top match: (p: Pattern) on: v|] =: do
-        p <- here "p" >>= findPattern >>= matchable' . fromPattern
+        p <- here "p" >>= getV >>= matchable' . fromPattern
         v <- here "v"
         t <- here "top"
 

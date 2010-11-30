@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel.Comparable (load) where
 
 import qualified Data.Vector as V
@@ -23,28 +23,28 @@ load = do
     [$p|(a: Object) /= (b: Object)|] =::: [$e|(a == b) not|]
 
     [$p|(a: Char) < (b: Char)|] =: do
-        Char a <- here "a" >>= findChar
-        Char b <- here "b" >>= findChar
+        (a :: Char) <- here "a" >>= getV
+        (b :: Char) <- here "b" >>= getV
         return $ Boolean (a < b)
 
     [$p|(a: Char) > (b: Char)|] =: do
-        Char a <- here "a" >>= findChar
-        Char b <- here "b" >>= findChar
+        (a :: Char) <- here "a" >>= getV
+        (b :: Char) <- here "b" >>= getV
         return $ Boolean (a > b)
 
     [$p|(a: Char) <= (b: Char)|] =: do
-        Char a <- here "a" >>= findChar
-        Char b <- here "b" >>= findChar
+        (a :: Char) <- here "a" >>= getV
+        (b :: Char) <- here "b" >>= getV
         return $ Boolean (a <= b)
 
     [$p|(a: Char) >= (b: Char)|] =: do
-        Char a <- here "a" >>= findChar
-        Char b <- here "b" >>= findChar
+        (a :: Char) <- here "a" >>= getV
+        (b :: Char) <- here "b" >>= getV
         return $ Boolean (a >= b)
 
     [$p|(a: Char) == (b: Char)|] =: do
-        Char a <- here "a" >>= findChar
-        Char b <- here "b" >>= findChar
+        (a :: Char) <- here "a" >>= getV
+        (b :: Char) <- here "b" >>= getV
         return $ Boolean (a == b)
 
     [$p|(a: Integer) < (b: Integer)|] =: primII (<)
@@ -108,17 +108,17 @@ load = do
             else return $ Boolean False
 
     [$p|(a: Process) == (b: Process)|] =: do
-        Process _ a <- here "a" >>= findProcess
-        Process _ b <- here "b" >>= findProcess
+        ((_, a) :: Process) <- here "a" >>= getV
+        ((_, b) :: Process) <- here "b" >>= getV
         return $ Boolean (a == b)
 
     [$p|(a: Message) == (b: Message)|] =: do
-        Message a <- here "a" >>= findMessage
-        Message b <- here "b" >>= findMessage
+        (a :: Message Value) <- here "a" >>= getV
+        (b :: Message Value) <- here "b" >>= getV
 
         case (a, b) of
             (Single ai _ at, Single bi _ bt) -> do
-                Boolean t <- dispatch (keyword ["=="] [at, bt]) >>= findBoolean
+                (t :: Bool) <- dispatch (keyword ["=="] [at, bt]) >>= getV
                 return $ Boolean (ai == bi && t)
             (Keyword ai _ avs, Keyword bi _ bvs)
                 | ai == bi && length avs == length bvs -> do
@@ -127,8 +127,8 @@ load = do
             _ -> return $ Boolean False
 
     [$p|(a: Particle) == (b: Particle)|] =: do
-        Particle a <- here "a" >>= findParticle
-        Particle b <- here "b" >>= findParticle
+        (a :: Particle Value) <- here "a" >>= getV
+        (b :: Particle Value) <- here "b" >>= getV
 
         case (a, b) of
             (PMSingle an, PMSingle bn) ->
@@ -145,46 +145,46 @@ load = do
             _ -> return $ Boolean False
   where
     primII f = do
-        Integer a <- here "a" >>= findInteger
-        Integer b <- here "b" >>= findInteger
+        (a :: Integer) <- here "a" >>= getV
+        (b :: Integer) <- here "b" >>= getV
         return (Boolean $ f a b)
 
     primDD f = do
-        Double a <- here "a" >>= findDouble
-        Double b <- here "b" >>= findDouble
+        (a :: Double) <- here "a" >>= getV
+        (b :: Double) <- here "b" >>= getV
         return (Boolean $ f a b)
 
     primRR f = do
-        Rational a <- here "a" >>= findRational
-        Rational b <- here "b" >>= findRational
+        (a :: Rational) <- here "a" >>= getV
+        (b :: Rational) <- here "b" >>= getV
         return (Boolean $ f a b)
 
     primID f = do
-        Integer a <- here "a" >>= findInteger
-        Double b <- here "b" >>= findDouble
+        (a :: Integer) <- here "a" >>= getV
+        (b :: Double) <- here "b" >>= getV
         return (Boolean $ f (fromIntegral a) b)
 
     primIR f = do
-        Integer a <- here "a" >>= findInteger
-        Rational b <- here "b" >>= findRational
+        (a :: Integer) <- here "a" >>= getV
+        (b :: Rational) <- here "b" >>= getV
         return (Boolean $ f (toRational a) b)
 
     primDI f = do
-        Double a <- here "a" >>= findDouble
-        Integer b <- here "b" >>= findInteger
+        (a :: Double) <- here "a" >>= getV
+        (b :: Integer) <- here "b" >>= getV
         return (Boolean $ f a (fromIntegral b))
 
     primDR f = do
-        Double a <- here "a" >>= findDouble
-        Rational b <- here "b" >>= findRational
+        (a :: Double) <- here "a" >>= getV
+        (b :: Rational) <- here "b" >>= getV
         return (Boolean $ f (toRational a) b)
 
     primRD f = do
-        Rational a <- here "a" >>= findRational
-        Double b <- here "b" >>= findDouble
+        (a :: Rational) <- here "a" >>= getV
+        (b :: Double) <- here "b" >>= getV
         return (Boolean $ f a (toRational b))
 
     primRI f = do
-        Rational a <- here "a" >>= findRational
-        Integer b <- here "b" >>= findInteger
+        (a :: Rational) <- here "a" >>= getV
+        (b :: Integer) <- here "b" >>= getV
         return (Boolean $ f a (toRational b))

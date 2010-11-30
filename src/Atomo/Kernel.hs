@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel (load) where
 
 import Data.IORef
@@ -78,7 +78,7 @@ load = do
 
     [$p|(x: Object) responds-to?: (p: Particle)|] =: do
         x <- here "x"
-        Particle p' <- here "p" >>= findParticle
+        (p' :: Particle Value) <- here "p" >>= getV
 
         let completed =
                 case p' of
@@ -128,23 +128,23 @@ load = do
 
     [$p|v do: (b: Block)|] =: do
         v <- here "v"
-        b <- here "b" >>= findBlock
+        b <- here "b" >>= getV
         joinWith v b []
         return v
     [$p|v do: (b: Block) with: (l: List)|] =: do
         v <- here "v"
-        b <- here "b" >>= findBlock
+        b <- here "b" >>= getV
         as <- getList [$e|l|]
         joinWith v b as
         return v
 
     [$p|v join: (b: Block)|] =: do
         v <- here "v"
-        b <- here "b" >>= findBlock
+        b <- here "b" >>= getV
         joinWith v b []
     [$p|v join: (b: Block) with: (l: List)|] =: do
         v <- here "v"
-        b <- here "b" >>= findBlock
+        b <- here "b" >>= getV
         as <- getList [$e|l|]
         joinWith v b as
 
@@ -168,7 +168,7 @@ load = do
 
 
 joinWith :: Value -> Value -> [Value] -> VM Value
-joinWith t (Block s ps bes) as
+joinWith t (Block (s, ps, bes)) as
     | length ps > length as =
         throwError (BlockArity (length ps) (length as))
     | null as || null ps =

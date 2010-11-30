@@ -24,7 +24,7 @@ type VM = ContT Value (StateT Env IO)
 -- | All values usable in Atomo.
 data Value
     -- | A block of expressions, bound to a context and with optional arguments.
-    = Block !Value [Pattern] [Expr]
+    = Block !Block
 
     -- | A boolean value.
     | Boolean { fromBoolean :: !Bool }
@@ -45,7 +45,7 @@ data Value
     | Haskell Dynamic
 
     -- | An Integer value.
-    | Integer { fromInteger :: !Integer }
+    | Integer !Integer
 
     -- | A vector of Values.
     | List VVector
@@ -60,7 +60,7 @@ data Value
     | Particle { fromParticle :: Particle Value }
 
     -- | A process; a communications channel and the thread's ID.
-    | Process Channel ThreadId
+    | Process !Process
 
     -- | A pattern value.
     | Pattern { fromPattern :: Pattern }
@@ -348,9 +348,14 @@ type VVector = V.Vector Value
 -- | A reference to a continuation function.
 type Continuation = IORef (Value -> VM Value)
 
+-- | A block of expressions, bound to a context and with optional arguments.
+type Block = (Value, [Pattern], [Expr])
+
+-- | A process; a communications channel and the thread's ID.
+type Process = (Channel, ThreadId)
 
 instance Eq Value where
-    (==) (Block at aps aes) (Block bt bps bes) =
+    (==) (Block (at, aps, aes)) (Block (bt, bps, bes)) =
         at == bt && aps == bps && aes == bes
     (==) (Boolean a) (Boolean b) = a == b
     (==) (Char a) (Char b) = a == b
@@ -363,7 +368,7 @@ instance Eq Value where
     (==) (Message a) (Message b) = a == b
     (==) (Method a) (Method b) = a == b
     (==) (Particle a) (Particle b) = a == b
-    (==) (Process _ a) (Process _ b) = a == b
+    (==) (Process (_, a)) (Process (_, b)) = a == b
     (==) (Rational a) (Rational b) = a == b
     (==) (Reference a) (Reference b) = a == b
     (==) (String a) (String b) = a == b
@@ -449,7 +454,7 @@ instance (S.Lift v) => S.Lift (Particle v) where
     lift (PMKeyword ns vs) = [| PMKeyword ns vs |]
 
 instance S.Lift Value where
-    lift (Block s as es) = [| Block s as es |]
+    lift (Block (s, as, es)) = [| Block (s, as, es) |]
     lift (Boolean b) = [| Boolean b |]
     lift (Char c) = [| Char c |]
     lift (Double d) = [| Double $(return $ S.LitE (S.RationalL (toRational d))) |]
@@ -595,91 +600,6 @@ pkeyword :: [String] -> [Pattern] -> Pattern
 {-# INLINE pkeyword #-}
 pkeyword ns = PMessage . keyword ns
 
--- | Is a value a `Block'?
-isBlock :: Value -> Bool
-isBlock (Block _ _ _) = True
-isBlock _ = False
-
--- | Is a value a `Boolean'?
-isBoolean :: Value -> Bool
-isBoolean (Boolean _) = True
-isBoolean _ = False
-
--- | Is a value a `Char'?
-isChar :: Value -> Bool
-isChar (Char _) = True
-isChar _ = False
-
--- | Is a value a `Continuation'?
-isContinuation :: Value -> Bool
-isContinuation (Continuation _) = True
-isContinuation _ = False
-
--- | Is a value a `Double'?
-isDouble :: Value -> Bool
-isDouble (Double _) = True
-isDouble _ = False
-
--- | Is a value an `Expression'?
-isExpression :: Value -> Bool
-isExpression (Expression _) = True
-isExpression _ = False
-
--- | Is a value a `Haskell'?
-isHaskell :: Value -> Bool
-isHaskell (Haskell _) = True
-isHaskell _ = False
-
--- | Is a value an `Integer'?
-isInteger :: Value -> Bool
-isInteger (Integer _) = True
-isInteger _ = False
-
--- | Is a value a `List'?
-isList :: Value -> Bool
-isList (List _) = True
-isList _ = False
-
--- | Is a value a `Message'?
-isMessage :: Value -> Bool
-isMessage (Message _) = True
-isMessage _ = False
-
--- | Is a value a `Method'?
-isMethod :: Value -> Bool
-isMethod (Method _) = True
-isMethod _ = False
-
--- | Is a value a `Particle'?
-isParticle :: Value -> Bool
-isParticle (Particle _) = True
-isParticle _ = False
-
--- | Is a value a `Pattern'?
-isPattern :: Value -> Bool
-isPattern (Pattern _) = True
-isPattern _ = False
-
--- | Is a value a `Process'?
-isProcess :: Value -> Bool
-isProcess (Process _ _) = True
-isProcess _ = False
-
--- | Is a value a `Rational'?
-isRational :: Value -> Bool
-isRational (Rational _) = True
-isRational _ = False
-
--- | Is a value a `Reference'?
-isReference :: Value -> Bool
-isReference (Reference _) = True
-isReference _ = False
-
--- | Is a value a `String'?
-isString :: Value -> Bool
-isString (String _) = True
-isString _ = False
-
 -- | Convert an AtomoError into the Value we want to error with.
 asValue :: AtomoError -> Value
 asValue (Error v) = v
@@ -719,7 +639,7 @@ asValue (DynamicNeeded t) =
 orefFrom :: IDs -> Value -> ORef
 {-# INLINE orefFrom #-}
 orefFrom _ (Reference r) = r
-orefFrom ids (Block _ _ _) = idBlock ids
+orefFrom ids (Block (_, _, _)) = idBlock ids
 orefFrom ids (Boolean _) = idBoolean ids
 orefFrom ids (Char _) = idChar ids
 orefFrom ids (Continuation _) = idContinuation ids
@@ -731,7 +651,7 @@ orefFrom ids (List _) = idList ids
 orefFrom ids (Message _) = idMessage ids
 orefFrom ids (Method _) = idMethod ids
 orefFrom ids (Particle _) = idParticle ids
-orefFrom ids (Process _ _) = idProcess ids
+orefFrom ids (Process (_, _)) = idProcess ids
 orefFrom ids (Pattern _) = idPattern ids
 orefFrom ids (Rational _) = idRational ids
 orefFrom ids (String _) = idString ids

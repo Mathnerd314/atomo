@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel.List (load) where
 
 import Data.List (isPrefixOf)
@@ -18,7 +18,7 @@ load = do
         liftM (Boolean . V.null) (getVector [$e|l|])
 
     [$p|(l: List) at: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         vs <- getVector [$e|l|]
 
         if fromIntegral n >= V.length vs
@@ -43,8 +43,8 @@ load = do
 
     [$p|(l: List) from: (s: Integer) take: (n: Integer)|] =: do
         vs <- getVector [$e|l|]
-        Integer start <- here "s" >>= findInteger
-        Integer num <- here "n" >>= findInteger
+        (start :: Integer) <- here "s" >>= getV
+        (num :: Integer) <- here "n" >>= getV
 
         if start < 0 || num < 0 || (start + num) > fromIntegral (V.length vs)
             then here "l" >>= \l -> raise
@@ -67,22 +67,22 @@ load = do
 
     [$p|(l: List) take: (n: Integer)|] =: do
         vs <- getVector [$e|l|]
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         return . List $ V.take (fromIntegral n) vs
 
     [$p|(l: List) drop: (n: Integer)|] =: do
         vs <- getVector [$e|l|]
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         return . List $ V.drop (fromIntegral n) vs
 
     [$p|v replicate: (n: Integer)|] =: do
         v <- here "v"
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         return . List $ V.replicate (fromIntegral n) v
 
     [$p|(b: Block) repeat: (n: Integer)|] =: do
-        b <- here "b" >>= findBlock
-        Integer n <- here "n" >>= findInteger
+        b <- here "b" >>= getV
+        (n :: Integer) <- here "n" >>= getV
         vs <- V.replicateM (fromIntegral n) (callBlock b [])
         return $ List vs
 
@@ -119,7 +119,7 @@ load = do
         b <- here "b"
 
         nvs <- V.filterM (\v -> do
-            Boolean t <- dispatch (keyword ["call"] [b, list [v]]) >>= findBoolean
+            (t :: Bool) <- dispatch (keyword ["call"] [b, list [v]]) >>= getV
             return t) vs
 
         return $ List nvs
@@ -167,7 +167,7 @@ load = do
         b <- here "b"
 
         nvs <- V.mapM (\v -> do
-            Boolean t <- dispatch (keyword ["call"] [b, list [v]]) >>= findBoolean
+            (t :: Bool) <- dispatch (keyword ["call"] [b, list [v]]) >>= getV
             return t) vs
 
         return $ Boolean (V.and nvs)
@@ -177,7 +177,7 @@ load = do
         b <- here "b"
 
         nvs <- V.mapM (\v -> do
-            Boolean t <- dispatch (keyword ["call"] [b, list [v]]) >>= findBoolean
+            (t :: Bool) <- dispatch (keyword ["call"] [b, list [v]]) >>= getV
             return t) vs
 
         return $ Boolean (V.or nvs)
@@ -215,25 +215,25 @@ load = do
     -- TODO: find
 
     [$p|(x: Integer) .. (y: Integer)|] =: do
-        Integer x <- here "x" >>= findInteger
-        Integer y <- here "y" >>= findInteger
+        (x :: Integer) <- here "x" >>= getV
+        (y :: Integer) <- here "y" >>= getV
 
         if x < y
             then dispatch (keyword ["up-to"] [Integer x, Integer y])
             else dispatch (keyword ["down-to"] [Integer x, Integer y])
 
     [$p|(x: Integer) ... (y: Integer)|] =: do
-        Integer x <- here "x" >>= findInteger
-        Integer y <- here "y" >>= findInteger
+        (x :: Integer) <- here "x" >>= getV
+        (y :: Integer) <- here "y" >>= getV
 
         if x < y
             then dispatch (keyword ["up-to"] [Integer x, Integer (y - 1)])
             else dispatch (keyword ["down-to"] [Integer x, Integer (y + 1)])
 
     [$p|(x: Integer) to: (y: Integer) by: (d: Integer)|] =: do
-        Integer x <- here "x" >>= findInteger
-        Integer y <- here "y" >>= findInteger
-        Integer d <- here "d" >>= findInteger
+        (x :: Integer) <- here "x" >>= getV
+        (y :: Integer) <- here "y" >>= getV
+        (d :: Integer) <- here "d" >>= getV
 
         return . List $ V.generate
             (fromIntegral $ abs ((y - x) `div` d) + 1)
@@ -246,7 +246,7 @@ load = do
     [$p|(l: List) at: (n: Integer) put: v|] =: do
         vs <- getVector [$e|l|]
 
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         v <- here "v"
 
         if fromIntegral n >= V.length vs
@@ -294,7 +294,7 @@ load = do
         cmp <- here "cmp"
 
         liftM list $ sortByVM (\a b -> do
-            Boolean t <- dispatch (keyword ["call"] [cmp, list [a, b]]) >>= findBoolean
+            (t :: Bool) <- dispatch (keyword ["call"] [cmp, list [a, b]]) >>= getV
             return t) vs
 
 
@@ -311,7 +311,7 @@ sortVM :: [Value] -> VM [Value]
 sortVM = sortByVM gt
   where
     gt a b = do
-        Boolean t <- dispatch (keyword [">"] [a, b]) >>= findBoolean
+        (t :: Bool) <- dispatch (keyword [">"] [a, b]) >>= getV
         return t
 
 sortByVM :: (Value -> Value -> VM Bool) -> [Value] -> VM [Value]

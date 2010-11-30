@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel.Ports (load) where
 
 import Data.Char (isSpace)
@@ -7,6 +7,7 @@ import System.Console.Haskeline as Haskeline
 import System.Directory
 import System.FilePath ((</>), (<.>))
 import System.IO
+import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 
 import Atomo
@@ -34,7 +35,7 @@ load = do
     [$p|Port new: (fn: String)|] =::: [$e|Port new: fn mode: @read-write|]
     [$p|Port new: (fn: String) mode: (m: Particle)|] =: do
         fn <- getString [$e|fn|]
-        Particle m <- here "m" >>= findParticle
+        (m :: Particle Value) <- here "m" >>= getV
 
         hdl <- case m of
             PMSingle "read" ->
@@ -58,7 +59,7 @@ load = do
         c <- liftIO (hIsClosed hdl)
         when c (raise ["port-closed", "for"] [port, x])
 
-        String s <- eval [$e|x as: String|] >>= findString
+        (s :: T.Text) <- eval [$e|x as: String|] >>= getV
 
         liftIO (TIO.hPutStrLn hdl s)
         liftIO (hFlush hdl)
@@ -72,7 +73,7 @@ load = do
         c <- liftIO (hIsClosed hdl)
         when c (raise ["port-closed", "for"] [port, x])
 
-        String s <- eval [$e|x as: String|] >>= findString
+        (s :: T.Text) <- eval [$e|x as: String|] >>= getV
 
         liftIO (TIO.hPutStr hdl s)
         liftIO (hFlush hdl)
@@ -207,28 +208,28 @@ load = do
             >>= liftM (Boolean . searchable) . liftIO . getPermissions
 
     [$p|File set-readable: (fn: String) to: (b: Boolean)|] =: do
-        Boolean r <- here "b" >>= findBoolean
+        (r :: Bool) <- here "b" >>= getV
         fn <- getString [$e|fn|]
         ps <- liftIO (getPermissions fn)
         liftIO (setPermissions fn (ps { readable = r }))
         return (particle "ok")
 
     [$p|File set-writable: (fn: String) to: (b: Boolean)|] =: do
-        Boolean w <- here "b" >>= findBoolean
+        (w :: Bool) <- here "b" >>= getV
         fn <- getString [$e|fn|]
         ps <- liftIO (getPermissions fn)
         liftIO (setPermissions fn (ps { writable = w }))
         return (particle "ok")
 
     [$p|File set-executable: (fn: String) to: (b: Boolean)|] =: do
-        Boolean x <- here "b" >>= findBoolean
+        (x :: Bool) <- here "b" >>= getV
         fn <- getString [$e|fn|]
         ps <- liftIO (getPermissions fn)
         liftIO (setPermissions fn (ps { executable = x }))
         return (particle "ok")
 
     [$p|File set-searchable: (fn: String) to: (b: Boolean)|] =: do
-        Boolean s <- here "b" >>= findBoolean
+        (s :: Bool) <- here "b" >>= getV
         fn <- getString [$e|fn|]
         ps <- liftIO (getPermissions fn)
         liftIO (setPermissions fn (ps { searchable = s }))

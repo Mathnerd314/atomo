@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel.String where
 
 import Data.List (sort)
@@ -6,6 +6,7 @@ import Data.Ratio ((%))
 import qualified Data.Text as T
 
 import Atomo
+import Atomo.Value
 
 
 load :: VM ()
@@ -37,12 +38,12 @@ load = do
     [$p|(l: List) to-string|] =: do
         vs <- getList [$e|l|]
 
-        if all isChar vs
+        if all (isValue (undefined :: Char)) vs
             then return $ string (map (\(Char c) -> c) vs)
             else raise' "list-not-homogenous"
 
     [$p|(c: Char) singleton|] =: do
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         return (String (T.singleton c))
 
     [$p|(s: String) length|] =:
@@ -52,7 +53,7 @@ load = do
         liftM (Boolean . T.null) $ getText [$e|s|]
 
     [$p|(s: String) at: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         t <- getText [$e|s|]
 
         if fromIntegral n >= T.length t
@@ -68,8 +69,8 @@ load = do
         liftM (Char . T.last) (getText [$e|s|])
 
     [$p|(s: String) from: (n: Integer) to: (m: Integer)|] =: do
-            Integer n <- here "n" >>= findInteger
-            Integer m <- here "m" >>= findInteger
+            (n :: Integer) <- here "n" >>= getV
+            (m :: Integer) <- here "m" >>= getV
             t <- getText [$e|s|]
 
             let start = fromIntegral n
@@ -90,11 +91,11 @@ load = do
         liftM (String . T.tail) (getText [$e|s|])
 
     [$p|(s: String) take: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         liftM (String . T.take (fromIntegral n)) (getText [$e|s|])
 
     [$p|(s: String) drop: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         liftM (String . T.drop (fromIntegral n)) (getText [$e|s|])
 
     [$p|(s: String) take-while: test|] =: do
@@ -122,12 +123,12 @@ load = do
         liftM string $ dropWhileM s
 
     [$p|(c: Char) repeat: (n: Integer)|] =: do
-        Char c <- here "c" >>= findChar
-        Integer n <- here "n" >>= findInteger
+        (c :: Char) <- here "c" >>= getV
+        (n :: Integer) <- here "n" >>= getV
         return (string (replicate (fromIntegral n) c))
 
     [$p|(s: String) repeat: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         liftM (String . T.replicate (fromIntegral n)) (getText [$e|s|])
 
     [$p|(a: String) .. (b: String)|] =: do
@@ -142,14 +143,14 @@ load = do
 
     [$p|(l: List) join: (d: String)|] =: do
         ts <- getList [$e|l|]
-            >>= mapM (liftM (\(String t) -> t) . findString)
+            >>= mapM getV
 
         d <- getText [$e|d|]
 
         return (String (T.intercalate d ts))
 
     [$p|(s: String) intersperse: (c: Char)|] =: do
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         t <- getText [$e|s|]
         return (String (T.intersperse c t))
 
@@ -162,11 +163,11 @@ load = do
 
     [$p|(s: String) split-on: (d: Char)|] =: do
         s <- getText [$e|s|]
-        Char d <- here "d" >>= findChar
+        (d :: Char) <- here "d" >>= getV
         return $ list (map String (T.splitBy (== d) s))
 
     [$p|(s: String) split-at: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         s <- getText [$e|s|]
         let (a, b) = T.splitAt (fromIntegral n) s
         return $ list [String a, String b]
@@ -196,7 +197,7 @@ load = do
         return $ list (map String (T.tails s))
 
     [$p|(s: String) chunks-of: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        (n :: Integer) <- here "n" >>= getV
         s <- getText [$e|s|]
         return $ list (map String (T.chunksOf (fromIntegral n) s))
 
@@ -223,14 +224,14 @@ load = do
         vs <- forM s $ \c ->
             dispatch (keyword ["call"] [b, list [Char c]])
 
-        if all isChar vs
+        if all (isValue (undefined :: Char)) vs
             then return (string (map (\(Char c) -> c) vs))
             else return $ list vs
 
     [$p|(s: String) each: (b: Block)|] =::: [$e|{ s map: b in-context; s } call|]
 
     [$p|(c: Char) . (s: String)|] =: do
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         s <- getText [$e|s|]
         return (String (T.cons c s))
 
@@ -238,7 +239,7 @@ load = do
 
     [$p|(s: String) << (c: Char)|] =: do
         s <- getText [$e|s|]
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         return (String (T.snoc s c))
 
     [$p|(haystack: String) replace: (needle: String) with: (new: String)|] =: do
@@ -258,22 +259,22 @@ load = do
 
     [$p|(s: String) left-justify: (length: Integer) with: (c: Char)|] =: do
         s <- getText [$e|s|]
-        Integer l <- here "length" >>= findInteger
-        Char c <- here "c" >>= findChar
+        (l :: Integer) <- here "length" >>= getV
+        (c :: Char) <- here "c" >>= getV
 
         return (String (T.justifyLeft (fromIntegral l) c s))
 
     [$p|(s: String) right-justify: (length: Integer) with: (c: Char)|] =: do
         s <- getText [$e|s|]
-        Integer l <- here "length" >>= findInteger
-        Char c <- here "c" >>= findChar
+        (l :: Integer) <- here "length" >>= getV
+        (c :: Char) <- here "c" >>= getV
 
         return (String (T.justifyRight (fromIntegral l) c s))
 
     [$p|(s: String) center: (length: Integer) with: (c: Char)|] =: do
         s <- getText [$e|s|]
-        Integer l <- here "length" >>= findInteger
-        Char c <- here "c" >>= findChar
+        (l :: Integer) <- here "length" >>= getV
+        (c :: Char) <- here "c" >>= getV
 
         return (String (T.center (fromIntegral l) c s))
 
@@ -287,15 +288,15 @@ load = do
         liftM (String . T.stripEnd) (getText [$e|s|])
 
     [$p|(s: String) strip: (c: Char)|] =: do
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         liftM (String . T.dropAround (== c)) (getText [$e|s|])
 
     [$p|(s: String) strip-start: (c: Char)|] =: do
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         liftM (String . T.dropWhile (== c)) (getText [$e|s|])
 
     [$p|(s: String) strip-end: (c: Char)|] =: do
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         liftM (String . T.dropWhileEnd (== c)) (getText [$e|s|])
 
     [$p|(s: String) all?: b|] =::: [$e|(s as: List) all?: b|]
@@ -303,7 +304,7 @@ load = do
 
     [$p|(s: String) contains?: (c: Char)|] =: do
         t <- getText [$e|s|]
-        Char c <- here "c" >>= findChar
+        (c :: Char) <- here "c" >>= getV
         return (Boolean (T.any (== c) t))
 
     [$p|(c: Char) in?: (s: String)|] =::: [$e|s contains?: c|]

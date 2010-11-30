@@ -55,7 +55,7 @@ eval (Operator { eNames = ns, eAssoc = a, ePrec = p }) = do
 eval (Primitive { eValue = v }) = return v
 eval (EBlock { eArguments = as, eContents = es }) = do
     t <- gets top
-    return (Block t as es)
+    return (Block (t, as, es))
 eval (EList { eContents = es }) = do
     vs <- mapM eval es
     return (list vs)

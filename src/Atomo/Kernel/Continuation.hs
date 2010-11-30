@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel.Continuation where
 
 import Data.IORef
@@ -16,7 +16,7 @@ load = do
     [$p|Continuation show|] =:: string "<continuation>"
 
     [$p|(c: Continuation) yield: v|] =: do
-        Continuation c <- here "c" >>= findContinuation
+        (c :: Continuation) <- here "c" >>= getV
         v <- here "v"
         liftIO (readIORef c) >>= ($ v)
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 module Atomo.Kernel.Block (load) where
 
@@ -15,34 +15,34 @@ load = do
         es <- getList [$e|es|]
         as <- getList [$e|as|]
 
-        return (Block t (map fromPattern as) (map fromExpression es))
+        return (Block (t, map fromPattern as, map fromExpression es))
 
     [$p|(b: Block) call|] =: do
-        b <- here "b" >>= findBlock
+        b <- here "b" >>= getV
         callBlock b []
 
     [$p|(b: Block) repeat|] =: do
-        b@(Block c _ _) <- here "b" >>= findBlock
+        b@(c, _, _) <- here "b" >>= getV
         withTop c (forever (callBlock b []))
 
     [$p|(b: Block) call: (l: List)|] =: do
-        b <- here "b" >>= findBlock
+        b <- here "b" >>= getV
         vs <- getList [$e|l|]
         callBlock b vs
 
     [$p|(b: Block) call-in: c|] =: do
-        Block _ _ es <- here "b" >>= findBlock
+        ((_, _, es) :: Block) <- here "b" >>= getV
         c <- here "c"
         withTop c (evalAll es)
 
     [$p|(b: Block) context|] =: do
-        Block s _ _ <- here "b" >>= findBlock
+        ((s, _, _) :: Block) <- here "b" >>= getV
         return s
 
     [$p|(b: Block) arguments|] =: do
-        Block _ as _ <- here "b" >>= findBlock
+        ((_, as, _) :: Block) <- here "b" >>= getV
         return $ list (map Pattern as)
 
     [$p|(b: Block) contents|] =: do
-        Block _ _ es <- here "b" >>= findBlock
+        ((_, _, es) :: Block) <- here "b" >>= getV
         return $ list (map Expression es)

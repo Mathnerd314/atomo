@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel.Numeric (load) where
 
 import Data.Ratio
@@ -19,162 +19,85 @@ load = do
     eval [$e|Integer delegates-to: Number|]
     eval [$e|Double delegates-to: Number|]
 
-    [$p|(i: Integer) sqrt|] =: do
-        Integer i <- here "i" >>= findInteger
-        return (Double (sqrt (fromIntegral i)))
+    [$p|(a: Integer) sqrt|] =: lift1 (sqrt . fromInteger :: Integer -> Double)
 
-    [$p|(d: Double) sqrt|] =: do
-        Double d <- here "d" >>= findDouble
-        return (Double (sqrt d))
+    [$p|(a: Double) sqrt|] =: lift1 (sqrt :: Double -> Double)
 
-    [$p|(d: Double) ceiling|] =: do
-        Double d <- here "d" >>= findDouble
-        return (Integer (ceiling d))
+    [$p|(a: Double) ceiling|] =: lift1 (ceiling :: Double -> Integer)
 
-    [$p|(d: Double) round|] =: do
-        Double d <- here "d" >>= findDouble
-        return (Integer (round d))
+    [$p|(a: Double) round|] =: lift1 (round :: Double -> Integer)
 
-    [$p|(d: Double) floor|] =: do
-        Double d <- here "d" >>= findDouble
-        return (Integer (floor d))
+    [$p|(a: Double) floor|] =: lift1 (floor :: Double -> Integer)
 
-    [$p|(i: Integer) reciprocal|] =: do
-        Integer i <- here "i" >>= findInteger
-        return (Double (recip (fromIntegral i)))
+    [$p|(a: Integer) reciprocal|] =: lift1 (recip . fromInteger :: Integer -> Double)
 
-    [$p|(d: Double) reciprocal|] =: do
-        Double d <- here "d" >>= findDouble
-        return (Double (recip d))
+    [$p|(a: Double) reciprocal|] =: lift1 (recip :: Double -> Double)
 
-    [$p|(r: Rational) reciprocal|] =: do
-        Rational r <- here "r" >>= findRational
-        return (Rational (recip r))
+    [$p|(a: Rational) reciprocal|] =: lift1 (recip :: Rational -> Rational)
 
-    [$p|(r: Rational) numerator|] =: do
-        Rational r <- here "r" >>= findRational
-        return (Integer (numerator r))
+    [$p|(a: Rational) numerator|] =: lift1 (numerator :: Rational -> Integer)
 
-    [$p|(r: Rational) denominator|] =: do
-        Rational r <- here "r" >>= findRational
-        return (Integer (denominator r))
+    [$p|(a: Rational) denominator|] =: lift1 (denominator :: Rational -> Integer)
 
     [$p|(d: Double) as: Integer|] =::: [$e|d floor|]
     [$p|(d: Double) as: Rational|] =::: [$e|d rationalize|]
-    [$p|(i: Integer) as: Double|] =: do
-        Integer i <- here "i" >>= findInteger
-        return (Double (fromIntegral i))
-    [$p|(i: Integer) as: Rational|] =: do
-        Integer i <- here "i" >>= findInteger
-        return (Rational (i % 1))
+    [$p|(a: Integer) as: Double|] =: lift1 (fromInteger :: Integer -> Double)
+    [$p|(a: Integer) as: Rational|] =: lift1 ((%1) :: Integer -> Rational)
     [$p|(r: Rational) as: Double|] =::: [$e|r approximate|]
     [$p|(r: Rational) as: Integer|] =::: [$e|r approximate floor|]
 
     [$p|(i: Integer) rationalize|] =::: [$e|(i as: Double) rationalize|]
     [$p|(d: Double) rationalize|] =::: [$e|d rationalize: 0.001|]
-    [$p|(d: Double) rationalize: (e: Double)|] =: do
-        Double d <- here "d" >>= findDouble
-        Double e' <- here "e" >>= findDouble
-        return (Rational (approxRational d e'))
+    [$p|(a: Double) rationalize: (b: Double)|] =: lift2 (approxRational :: Double -> Double -> Rational)
 
-    [$p|(r: Rational) approximate|] =: do
-        Rational r <- here "r" >>= findRational
-        return (Double (fromRational r))
+    [$p|(a: Rational) approximate|] =: lift1 (fromRational :: Rational -> Double)
 
-    [$p|(a: Integer) + (b: Integer)|] =: primII (+)
-    [$p|(a: Rational) + (b: Rational)|] =: primRR (+)
-    [$p|(a: Double) + (b: Double)|] =: primDD (+)
-    [$p|(a: Integer) + (b: Double)|] =: primID (+)
-    [$p|(a: Integer) + (b: Rational)|] =: primIR (+)
-    [$p|(a: Double) + (b: Integer)|] =: primDI (+)
-    [$p|(a: Double) + (b: Rational)|] =: primDR (+)
-    [$p|(a: Rational) + (b: Integer)|] =: primRI (+)
-    [$p|(a: Rational) + (b: Double)|] =: primRD (+)
+    [$p|(a: Integer) + (b: Integer)|] =: lift2 ((+) :: Integer -> Integer -> Integer)
+    [$p|(a: Rational) + (b: Rational)|] =: lift2 ((+) :: Rational -> Rational -> Rational)
+    [$p|(a: Double) + (b: Double)|] =: lift2 ((+) :: Double -> Double -> Double)
+    [$p|(a: Integer) + (b: Double)|] =: lift2 ((.fromInteger) (+) :: Integer -> Double -> Double)
+    [$p|(a: Integer) + (b: Rational)|] =: lift2 ((.toRational) (+) :: Integer -> Rational -> Rational)
+    [$p|(a: Double) + (b: Integer)|] =: lift2 ((\f a b -> f a (fromInteger b)) (+) :: Double -> Integer -> Double)
+    [$p|(a: Double) + (b: Rational)|] =: lift2 ((\f a b -> f (toRational a) b) (+) :: Double -> Rational -> Rational)
+    [$p|(a: Rational) + (b: Integer)|] =: lift2 ((\f a b -> f a (toRational b)) (+) :: Rational -> Integer -> Rational)
+    [$p|(a: Rational) + (b: Double)|] =: lift2 ((\f a b -> f a (toRational b)) (+) :: Rational -> Double -> Rational)
 
-    [$p|(a: Integer) - (b: Integer)|] =: primII (-)
-    [$p|(a: Rational) - (b: Rational)|] =: primRR (-)
-    [$p|(a: Double) - (b: Double)|] =: primDD (-)
-    [$p|(a: Integer) - (b: Double)|] =: primID (-)
-    [$p|(a: Integer) - (b: Rational)|] =: primIR (-)
-    [$p|(a: Double) - (b: Integer)|] =: primDI (-)
-    [$p|(a: Double) - (b: Rational)|] =: primDR (-)
-    [$p|(a: Rational) - (b: Integer)|] =: primRI (-)
-    [$p|(a: Rational) - (b: Double)|] =: primRD (-)
+    [$p|(a: Integer) - (b: Integer)|] =: lift2 ((-) :: Integer -> Integer -> Integer)
+    [$p|(a: Rational) - (b: Rational)|] =: lift2 ((-) :: Rational -> Rational -> Rational)
+    [$p|(a: Double) - (b: Double)|] =: lift2 ((-) :: Double -> Double -> Double)
+    [$p|(a: Integer) - (b: Double)|] =: lift2 ((\f a b -> f (fromInteger a) b) (-) :: Integer -> Double -> Double)
+    [$p|(a: Integer) - (b: Rational)|] =: lift2 ((\f a b -> f (toRational a) b) (-) :: Integer -> Rational -> Rational)
+    [$p|(a: Double) - (b: Integer)|] =: lift2 ((\f a b -> f a (fromInteger b)) (-) :: Double -> Integer -> Double)
+    [$p|(a: Double) - (b: Rational)|] =: lift2 ((\f a b -> f (toRational a) b) (-) :: Double -> Rational -> Rational)
+    [$p|(a: Rational) - (b: Integer)|] =: lift2 ((\f a b -> f a (toRational b)) (-) :: Rational -> Integer -> Rational)
+    [$p|(a: Rational) - (b: Double)|] =: lift2 ((\f a b -> f a (toRational b)) (-) :: Rational -> Double -> Rational)
 
-    [$p|(a: Integer) * (b: Integer)|] =: primII (*)
-    [$p|(a: Rational) * (b: Rational)|] =: primRR (*)
-    [$p|(a: Double) * (b: Double)|] =: primDD (*)
-    [$p|(a: Integer) * (b: Double)|] =: primID (*)
-    [$p|(a: Integer) * (b: Rational)|] =: primIR (*)
-    [$p|(a: Double) * (b: Integer)|] =: primDI (*)
-    [$p|(a: Double) * (b: Rational)|] =: primDR (*)
-    [$p|(a: Rational) * (b: Integer)|] =: primRI (*)
-    [$p|(a: Rational) * (b: Double)|] =: primRD (*)
+    [$p|(a: Integer) * (b: Integer)|] =: lift2 ((*) :: Integer -> Integer -> Integer)
+    [$p|(a: Rational) * (b: Rational)|] =: lift2 ((*) :: Rational -> Rational -> Rational)
+    [$p|(a: Double) * (b: Double)|] =: lift2 ((*) :: Double -> Double -> Double)
+    [$p|(a: Integer) * (b: Double)|] =: lift2 ((\f a b -> f (fromInteger a) b) (*) :: Integer -> Double -> Double)
+    [$p|(a: Integer) * (b: Rational)|] =: lift2 ((\f a b -> f (toRational a) b) (*) :: Integer -> Rational -> Rational)
+    [$p|(a: Double) * (b: Integer)|] =: lift2 ((\f a b -> f a (fromInteger b)) (*) :: Double -> Integer -> Double)
+    [$p|(a: Double) * (b: Rational)|] =: lift2 ((\f a b -> f (toRational a) b) (*) :: Double -> Rational -> Rational)
+    [$p|(a: Rational) * (b: Integer)|] =: lift2 ((\f a b -> f a (toRational b)) (*) :: Rational -> Integer -> Rational)
+    [$p|(a: Rational) * (b: Double)|] =: lift2 ((\f a b -> f a (toRational b)) (*) :: Rational -> Double -> Rational)
 
-    [$p|(a: Integer) / (b: Integer)|] =: primII div
-    [$p|(a: Rational) / (b: Rational)|] =: primRR (/)
-    [$p|(a: Double) / (b: Double)|] =: primDD (/)
-    [$p|(a: Integer) / (b: Double)|] =: primID (/)
-    [$p|(a: Integer) / (b: Rational)|] =: primIR (/)
-    [$p|(a: Double) / (b: Integer)|] =: primDI (/)
-    [$p|(a: Double) / (b: Rational)|] =: primDR (/)
-    [$p|(a: Rational) / (b: Integer)|] =: primRI (/)
-    [$p|(a: Rational) / (b: Double)|] =: primRD (/)
+    [$p|(a: Integer) / (b: Integer)|] =: lift2 (div :: Integer -> Integer -> Integer)
+    [$p|(a: Rational) / (b: Rational)|] =: lift2 ((/) :: Rational -> Rational -> Rational)
+    [$p|(a: Double) / (b: Double)|] =: lift2 ((/) :: Double -> Double -> Double)
+    [$p|(a: Integer) / (b: Double)|] =: lift2 ((\f a b -> f (fromInteger a) b) (/) :: Integer -> Double -> Double)
+    [$p|(a: Integer) / (b: Rational)|] =: lift2 ((\f a b -> f (toRational a) b) (/) :: Integer -> Rational -> Rational)
+    [$p|(a: Double) / (b: Integer)|] =: lift2 ((\f a b -> f a (fromInteger b)) (/) :: Double -> Integer -> Double)
+    [$p|(a: Double) / (b: Rational)|] =: lift2 ((\f a b -> f (toRational a) b) (/) :: Double -> Rational -> Rational)
+    [$p|(a: Rational) / (b: Integer)|] =: lift2 ((\f a b -> f a (toRational b)) (/) :: Rational -> Integer -> Rational)
+    [$p|(a: Rational) / (b: Double)|] =: lift2 ((\f a b -> f a (toRational b)) (/) :: Rational -> Double -> Rational)
 
-    [$p|(a: Integer) ^ (b: Integer)|] =: primII (^)
-    [$p|(a: Double) ^ (b: Double)|] =: primDD (**)
-    [$p|(a: Integer) ^ (b: Double)|] =: primID (**)
-    [$p|(a: Double) ^ (b: Integer)|] =: primDI (**)
-    [$p|(a: Rational) ^ (b: Integer)|] =: do
-        Rational a <- here "a" >>= findRational
-        Integer b <- here "b" >>= findInteger
-        return (Rational (a ^ b))
+    [$p|(a: Integer) ^ (b: Integer)|] =: lift2 ((^) :: Integer -> Integer -> Integer)
+    [$p|(a: Double) ^ (b: Double)|] =: lift2 ((**) :: Double -> Double -> Double)
+    [$p|(a: Integer) ^ (b: Double)|] =: lift2 ((\f a b -> f (fromInteger a) b) (**) :: Integer -> Double -> Double)
+    [$p|(a: Double) ^ (b: Integer)|] =: lift2 ((\f a b -> f a (fromInteger b)) (**) :: Double -> Integer -> Double)
+    [$p|(a: Rational) ^ (b: Integer)|] =: lift2 ((^) :: Rational -> Integer -> Rational)
 
-    [$p|(a: Integer) % (b: Integer)|] =: primII mod
-    [$p|(a: Integer) quotient: (b: Integer)|] =: primII quot
-    [$p|(a: Integer) remainder: (b: Integer)|] =: primII rem
-  where
-    primII f = do
-        Integer a <- here "a" >>= findInteger
-        Integer b <- here "b" >>= findInteger
-        return (Integer (f a b))
-
-    primDD f = do
-        Double a <- here "a" >>= findDouble
-        Double b <- here "b" >>= findDouble
-        return (Double (f a b))
-
-    primRR f = do
-        Rational a <- here "a" >>= findRational
-        Rational b <- here "b" >>= findRational
-        return (Rational (f a b))
-
-    primID f = do
-        Integer a <- here "a" >>= findInteger
-        Double b <- here "b" >>= findDouble
-        return (Double (f (fromIntegral a) b))
-
-    primIR f = do
-        Integer a <- here "a" >>= findInteger
-        Rational b <- here "b" >>= findRational
-        return (Rational (f (toRational a) b))
-
-    primDI f = do
-        Double a <- here "a" >>= findDouble
-        Integer b <- here "b" >>= findInteger
-        return (Double (f a (fromIntegral b)))
-
-    primDR f = do
-        Double a <- here "a" >>= findDouble
-        Rational b <- here "b" >>= findRational
-        return (Rational (f (toRational a) b))
-
-    primRD f = do
-        Rational a <- here "a" >>= findRational
-        Double b <- here "b" >>= findDouble
-        return (Rational (f a (toRational b)))
-
-    primRI f = do
-        Rational a <- here "a" >>= findRational
-        Integer b <- here "b" >>= findInteger
-        return (Rational (f a (toRational b)))
+    [$p|(a: Integer) % (b: Integer)|] =: lift2 (mod :: Integer -> Integer -> Integer)
+    [$p|(a: Integer) quotient: (b: Integer)|] =: lift2 (quot :: Integer -> Integer -> Integer)
+    [$p|(a: Integer) remainder: (b: Integer)|] =: lift2 (rem :: Integer -> Integer -> Integer)

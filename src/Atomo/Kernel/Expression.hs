@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 {-# OPTIONS -fno-warn-name-shadowing #-}
 module Atomo.Kernel.Expression (load) where
 
@@ -15,20 +15,20 @@ load :: VM ()
 load = do
     [$p|`Block new: (es: List)|] =::: [$e|`Block new: es arguments: []|]
     [$p|`Block new: (es: List) arguments: (as: List)|] =: do
-        es <- getList [$e|es|] >>= mapM findExpression
+        es <- getList [$e|es|] >>= mapM getV
         as <- getList [$e|as|] >>=
-            mapM (\e -> findExpression e >>= toPattern' . fromExpression)
+            mapM (\e -> getV e >>= toPattern' . fromExpression)
 
         return (Expression (EBlock Nothing as (map fromExpression es)))
 
     [$p|`List new: (es: List)|] =: do
-        es <- getList [$e|es|] >>= mapM findExpression
+        es <- getList [$e|es|] >>= mapM getV
         return (Expression (EList Nothing (map fromExpression es)))
 
     [$p|`Match new: (branches: List) on: (value: Expression)|] =: do
-        pats <- liftM (map fromExpression) $ getList [$e|branches map: @from|] >>= mapM findExpression
-        exprs <- liftM (map fromExpression) $ getList [$e|branches map: @to|] >>= mapM findExpression
-        Expression value <- here "value" >>= findExpression
+        pats <- liftM (map fromExpression) $ getList [$e|branches map: @from|] >>= mapM getV
+        exprs <- liftM (map fromExpression) $ getList [$e|branches map: @to|] >>= mapM getV
+        Expression value <- here "value" >>= getV
 
         ps <- mapM toRolePattern' pats
         ids <- gets primitives
@@ -36,22 +36,22 @@ load = do
             eval value >>= matchBranches ids (zip ps exprs)
 
     [$p|`Set new: (pattern: Expression) to: (value: Expression)|] =: do
-        Expression pat <- here "pattern" >>= findExpression
-        Expression e <- here "value" >>= findExpression
+        pat <- here "pattern" >>= getV
+        e <- here "value" >>= getV
 
         p <- toPattern' pat
         return (Expression $ Set Nothing p e)
 
     [$p|`Define new: (pattern: Expression) as: (expr: Expression)|] =: do
-        Expression pat <- here "pattern" >>= findExpression
-        Expression e <- here "expr" >>= findExpression
+        pat <- here "pattern" >>= getV
+        e <- here "expr" >>= getV
 
         p <- toDefinePattern' pat
         return (Expression $ Define Nothing p e)
 
     [$p|`Dispatch new: (name: Particle) to: (targets: List)|] =: do
-        Particle name <- here "name" >>= findParticle
-        ts <- getList [$e|targets|] >>= mapM findExpression
+        (name :: Particle Value) <- here "name" >>= getV
+        ts <- getList [$e|targets|] >>= mapM getV
 
         case name of
             PMSingle n ->
@@ -65,15 +65,15 @@ load = do
 
     [$p|top evaluate: (e: Expression)|] =: do
         t <- here "top"
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
         withTop t (eval e)
 
     [$p|(e: Expression) expand|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
         liftM Expression $ withParser (macroExpand e)
 
     [$p|(e: Expression) type|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
         case e of
             Dispatch { eMessage = Keyword {} } ->
                 return (keyParticleN ["dispatch"] [particle "keyword"])
@@ -99,7 +99,7 @@ load = do
                 return (keyParticleN ["particle"] [particle "single"])
 
     [$p|(e: Expression) target|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
 
         case e of
             Dispatch { eMessage = Single { mTarget = t } } ->
@@ -107,7 +107,7 @@ load = do
             _ -> raise ["no-target-for"] [Expression e]
 
     [$p|(e: Expression) targets|] =: do
-        Expression e <- here "e" >>= findExpression
+        Expression e <- here "e" >>= getV
 
         case e of
             Dispatch { eMessage = Keyword { mTargets = ts } } ->
@@ -117,7 +117,7 @@ load = do
             _ -> raise ["no-targets-for"] [Expression e]
 
     [$p|(e: Expression) name|] =: do
-        Expression e <- here "e" >>= findExpression
+        Expression e <- here "e" >>= getV
 
         case e of
             EParticle _ (PMSingle n) -> return (string n)
@@ -126,7 +126,7 @@ load = do
             _ -> raise ["no-name-for"] [Expression e]
 
     [$p|(e: Expression) names|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
 
         case e of
             EParticle _ (PMKeyword ns _) ->
@@ -136,7 +136,7 @@ load = do
             _ -> raise ["no-names-for"] [Expression e]
 
     [$p|(e: Expression) particle|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
 
         case e of
             Dispatch { eMessage = Keyword { mNames = ns } } ->
@@ -148,7 +148,7 @@ load = do
             _ -> raise ["no-particle-for"] [Expression e]
 
     [$p|(e: Expression) values|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
 
         case e of
             EParticle { eParticle = PMKeyword _ mes } ->
@@ -159,7 +159,7 @@ load = do
             _ -> raise ["no-values-for"] [Expression e]
 
     [$p|(e: Expression) contents|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
 
         case e of
             EBlock { eContents = es } ->
@@ -169,7 +169,7 @@ load = do
             _ -> raise ["no-contents-for"] [Expression e]
 
     [$p|(e: Expression) arguments|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
 
         case e of
             EBlock { eArguments = as } ->
@@ -177,7 +177,7 @@ load = do
             _ -> raise ["no-arguments-for"] [Expression e]
 
     [$p|(e: Expression) pattern|] =: do
-        Expression e <- here "e" >>= findExpression
+        Expression e <- here "e" >>= getV
         case e of
             Set { ePattern = p } -> return (Pattern p)
             Define { emPattern = p } -> return (Pattern (PMessage p))
@@ -185,7 +185,7 @@ load = do
             _ -> raise ["no-pattern-for"] [Expression e]
 
     [$p|(e: Expression) expression|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
         case e of
             Set { eExpr = e } -> return (Expression e)
             Define { eExpr = e } -> return (Expression e)
@@ -196,7 +196,7 @@ load = do
             _ -> raise ["no-expression-for"] [Expression e]
 
     [$p|(e: Expression) associativity|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
         case e of
             Operator { eAssoc = ALeft } ->
                 return (particle "left")
@@ -207,7 +207,7 @@ load = do
             _ -> raise ["no-associativity-for"] [Expression e]
 
     [$p|(e: Expression) precedence|] =: do
-        Expression e <- here "e" >>= findExpression
+        Expression e <- here "e" >>= getV
         case e of
             Operator { ePrec = p } ->
                 return (Integer p)
@@ -215,7 +215,7 @@ load = do
             _ -> raise ["no-precedence-for"] [Expression e]
 
     [$p|(e: Expression) operators|] =: do
-        Expression e <- here "e" >>= findExpression
+        e <- here "e" >>= getV
         case e of
             Operator { eNames = ns } ->
                 return (list (map (\n -> keyParticle [n] [Nothing, Nothing]) ns))

@@ -59,6 +59,3 @@ initCore = do
         , ("Rational", \is r -> is { idRational = r })
         , ("String", \is r -> is { idString = r })
         ]
-
-
-

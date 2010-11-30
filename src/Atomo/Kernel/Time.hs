@@ -1,4 +1,4 @@
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes, ScopedTypeVariables #-}
 module Atomo.Kernel.Time (load) where
 
 import Data.Time.Clock.POSIX (getPOSIXTime)
@@ -14,12 +14,12 @@ load = do
         liftM (Double . fromRational . toRational) (liftIO getPOSIXTime)
 
     [$p|Timer sleep: (n: Integer)|] =: do
-        Integer n <- here "n" >>= findInteger
+        n <- here "n" >>= getV
         liftIO (sleepFor n)
         return (particle "ok")
 
     [$p|Timer sleep: (d: Double)|] =: do
-        Double d <- here "d" >>= findDouble
+        (d :: Double) <- here "d" >>= getV
         liftIO (threadDelay (floor d))
         return (particle "ok")
 
